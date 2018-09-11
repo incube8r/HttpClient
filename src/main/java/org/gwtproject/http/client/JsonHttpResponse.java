@@ -1,9 +1,6 @@
 package org.gwtproject.http.client;
 
-import com.google.gwt.json.client.JSONObject;
-import com.google.gwt.json.client.JSONParser;
-
-public class JsonHttpResponse implements HttpResponse<JSONObject> {
+public class JsonHttpResponse implements HttpResponse<JsonNode> {
 
     private int status;
     private String statusText;
@@ -16,10 +13,10 @@ public class JsonHttpResponse implements HttpResponse<JSONObject> {
     }
 
     @Override
-    public JSONObject getBody() {
+    public JsonNode getBody() {
         if(rawBody != null && !rawBody.isEmpty()) {
-            JSONObject jsonObject = JSONParser.parseStrict(rawBody).isObject();
-            return jsonObject;
+            JsonNode jsonNode = new JsonNode(rawBody);
+            return jsonNode;
         }
         return null;
     }

@@ -5,7 +5,14 @@ import com.google.common.collect.Multimap;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.http.client.*;
 import com.google.gwt.json.client.JSONObject;
+import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
+import io.reactivex.SingleOnSubscribe;
+import org.gwtproject.http.client.exceptions.BadRequestException;
+import org.gwtproject.http.client.exceptions.NotFoundRequestException;
+import org.gwtproject.http.client.exceptions.UnauthorizedRequestException;
 
+import java.io.InputStream;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,12 +29,7 @@ public class HttpRequestWithBody {
     private Object body = null;
     private RequestBuilder.Method method;
     private int TIMEOUT = 60000;
-
     private String authorization;
-    private String httpResponse;
-    private String httpStatusText = null;
-    private Integer httpStatusCode = null;
-    private RequestException httpException;
 
     public HttpRequestWithBody(String url, RequestBuilder.Method method) {
         setUrl(url);
@@ -71,116 +73,190 @@ public class HttpRequestWithBody {
         return this;
     }
 
-    public HttpResponse<JSONObject> asJson() throws Exception {
-
-        proxyXMLHttpRequestOpen();
-
-        httpException = null;
-        httpResponse = null;
-
-        if(queryMap != null && !queryMap.isEmpty()){
-            url = url + "?";
-            url = url +  queries(queryMap);
-        }
-        RequestBuilder b = new RequestBuilder(method, url);
-        b.setTimeoutMillis(TIMEOUT);
-        if(headerMap != null){
-            // Check first if Content-Type and accept headers are already set else set defaults
-            boolean hasContentType = false;
-            boolean hasAccept = false;
-            for (Map.Entry<String,String> entry : headerMap.entries()) {
-                if(entry.getKey() != null && entry.getValue() != null
-                        && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
-                    if(entry.getKey().equals("Content-Type")) {
-                        hasContentType = true;
-                    } else if (entry.getKey().equals("accept")) {
-                        hasAccept = true;
+    public Single<HttpResponse<String>> asString() {
+        return Single.create(new SingleOnSubscribe<HttpResponse<String>>() {
+            @Override
+            public void subscribe(SingleEmitter<HttpResponse<String>> emitter) throws RequestException {
+                if(queryMap != null && !queryMap.isEmpty()){
+                    url = url + "?";
+                    url = url +  queries(queryMap);
+                }
+                RequestBuilder b = new RequestBuilder(method, url);
+                b.setTimeoutMillis(TIMEOUT);
+                if(headerMap != null){
+                    // Check first if Content-Type and accept headers are already set else set defaults
+                    boolean hasContentType = false;
+                    boolean hasAccept = false;
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            if(entry.getKey().equals("Content-Type")) {
+                                hasContentType = true;
+                            } else if (entry.getKey().equals("accept")) {
+                                hasAccept = true;
+                            }
+                        }
+                    }
+                    if(!hasAccept) {
+                        headerMap.put("accept", "application/json");
+                    }
+                    if(!hasContentType) {
+                        headerMap.put("Content-Type", "application/json");
+                    }
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            b.setHeader(entry.getKey(), entry.getValue());
+                        }
                     }
                 }
-            }
-            if(!hasAccept) {
-                headerMap.put("accept", "application/json");
-            }
-            if(!hasContentType) {
-                headerMap.put("Content-Type", "application/json");
-            }
-            for (Map.Entry<String,String> entry : headerMap.entries()) {
-                if(entry.getKey() != null && entry.getValue() != null
-                        && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
-                    b.setHeader(entry.getKey(), entry.getValue());
+                Object payload = body;
+                if(fields != null && !fields.isEmpty()){
+                    StringBuilder sb = new StringBuilder();
+                    Iterator<Map.Entry<String,Object>> it = fields.entrySet().iterator();
+                    while(it.hasNext()){
+                        Map.Entry<String,Object> entry = it.next();
+                        if(entry.getValue() instanceof String){
+                            if(!it.hasNext()){
+                                sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue()))));
+                            } else {
+                                sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue())))).append("&");
+                            }
+                        }
+                    }
+                    payload = sb.toString();
+                    b.setHeader("Content-Type","application/x-www-form-urlencoded");
                 }
-            }
-        }
-        Object payload = body;
-        if(fields != null && !fields.isEmpty()){
-            StringBuilder sb = new StringBuilder();
-            Iterator<Map.Entry<String,Object>> it = fields.entrySet().iterator();
-            while(it.hasNext()){
-                Map.Entry<String,Object> entry = it.next();
-                if(entry.getValue() instanceof String){
-                    if(!it.hasNext()){
-                        sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue()))));
-                    } else {
-                        sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue())))).append("&");
+                if(body != null){
+                    if(body instanceof JavaScriptObject){
+                        // TODO for Sending File
                     }
                 }
+                if(authorization != null){
+                    b.setHeader("Authorization", authorization);
+                }
+                if(payload != null) {
+                    b.sendRequest(String.valueOf(payload), new RequestCallback() {
+                        public void onResponseReceived(Request request, Response response) {
+                            String resp = response.getText();
+                            int statusCode = response.getStatusCode();
+                            String statusText = response.getStatusText();
+                            emitter.onSuccess(new StringHttpResponse(statusCode, statusText, resp));
+                        }
+                        public void onError(Request request, Throwable exception) {
+                            emitter.onError(exception);
+                        }
+                    });
+                } else {
+                    b.sendRequest("", new RequestCallback() {
+                        public void onResponseReceived(Request request, Response response) {
+                            String resp = response.getText();
+                            int statusCode = response.getStatusCode();
+                            String statusText = response.getStatusText();
+                            emitter.onSuccess(new StringHttpResponse(statusCode, statusText, resp));
+                        }
+                        public void onError(Request request, Throwable exception) {
+                            emitter.onError(exception);
+                        }
+                    });
+                }
             }
-            payload = sb.toString();
-            b.setHeader("Content-Type","application/x-www-form-urlencoded");
-        }
-        if(body != null){
-            if(this.body instanceof JavaScriptObject){
-                // TODO for Sending File
-            }
-        }
-        if(authorization != null){
-            b.setHeader("Authorization", authorization);
-        }
-        if(payload != null) {
-            b.sendRequest(String.valueOf(payload), new RequestCallback() {
-                public void onResponseReceived(Request request, Response response) {
-                    String resp = response.getText();
+        });
+    }
 
-                    int statusCode = response.getStatusCode();
-                    String statusText = response.getStatusText();
-                    setHttpStatusCode(statusCode);
-                    setResponse(resp);
-                    setHttpStatusText(statusText);
+    public Single<HttpResponse<JsonNode>> asJson() {
+        return Single.create(new SingleOnSubscribe<HttpResponse<JsonNode>>() {
+            @Override
+            public void subscribe(SingleEmitter<HttpResponse<JsonNode>> emitter) throws Exception {
+                if(queryMap != null && !queryMap.isEmpty()){
+                    url = url + "?";
+                    url = url +  queries(queryMap);
+                }
+                RequestBuilder b = new RequestBuilder(method, url);
+                b.setTimeoutMillis(TIMEOUT);
+                if(headerMap != null){
+                    // Check first if Content-Type and accept headers are already set else set defaults
+                    boolean hasContentType = false;
+                    boolean hasAccept = false;
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            if(entry.getKey().equals("Content-Type")) {
+                                hasContentType = true;
+                            } else if (entry.getKey().equals("accept")) {
+                                hasAccept = true;
+                            }
+                        }
+                    }
+                    if(!hasAccept) {
+                        headerMap.put("accept", "application/json");
+                    }
+                    if(!hasContentType) {
+                        headerMap.put("Content-Type", "application/json");
+                    }
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            b.setHeader(entry.getKey(), entry.getValue());
+                        }
+                    }
+                }
+                Object payload = body;
+                if(fields != null && !fields.isEmpty()){
+                    StringBuilder sb = new StringBuilder();
+                    Iterator<Map.Entry<String,Object>> it = fields.entrySet().iterator();
+                    while(it.hasNext()){
+                        Map.Entry<String,Object> entry = it.next();
+                        if(entry.getValue() instanceof String){
+                            if(!it.hasNext()){
+                                sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue()))));
+                            } else {
+                                sb.append(entry.getKey()).append("=").append(URL.encodeComponent((String.valueOf(entry.getValue())))).append("&");
+                            }
+                        }
+                    }
+                    payload = sb.toString();
+                    b.setHeader("Content-Type","application/x-www-form-urlencoded");
+                }
+                if(body != null){
+                    if(body instanceof JavaScriptObject){
+                        // TODO for Sending File
+                    }
+                }
+                if(authorization != null){
+                    b.setHeader("Authorization", authorization);
+                }
+                if(payload != null) {
+                    b.sendRequest(String.valueOf(payload), new RequestCallback() {
+                        public void onResponseReceived(Request request, Response response) {
+                            String resp = response.getText();
+                            int statusCode = response.getStatusCode();
+                            String statusText = response.getStatusText();
+                            emitter.onSuccess(new JsonHttpResponse(statusCode, statusText, resp));
+                        }
+                        public void onError(Request request, Throwable exception) {
+                            emitter.onError(exception);
+                        }
+                    });
+                } else {
+                    b.sendRequest("", new RequestCallback() {
+                        public void onResponseReceived(Request request, Response response) {
+                            String resp = response.getText();
+                            int statusCode = response.getStatusCode();
+                            String statusText = response.getStatusText();
+                            emitter.onSuccess(new JsonHttpResponse(statusCode, statusText, resp));
+                        }
+                        public void onError(Request request, Throwable exception) {
+                            emitter.onError(exception);
+                        }
+                    });
+                }
+            }
+        });
+    }
 
-                    if(response.getStatusCode() >= 400){
-                        setHttpException(new HttpRequestException(resp, response.getStatusCode()));
-                    } else {
-                        setResponse(response.getText());
-                    }
-                }
-                public void onError(Request request, Throwable exception) {
-                    setHttpException((RequestException) exception);
-                }
-            });
-        } else {
-            b.sendRequest("", new RequestCallback() {
-                public void onResponseReceived(Request request, Response response) {
-                    String resp = response.getText();
-                    int statusCode = response.getStatusCode();
-                    String statusText = response.getStatusText();
-                    setHttpStatusCode(statusCode);
-                    setResponse(resp);
-                    setHttpStatusText(statusText);
-                    if(response.getStatusCode() >= 400){
-                        setHttpException(new HttpRequestException(resp, response.getStatusCode()));
-                    } else {
-                        setResponse(response.getText());
-                    }
-                }
-                public void onError(Request request, Throwable exception) {
-                    setHttpException((RequestException) exception);
-                }
-            });
-        }
-        if(httpException != null) {
-            throw httpException;
-        }
-        return new JsonHttpResponse(getHttpStatusCode(), getHttpStatusText(), getResponse());
+    public Single<HttpResponse<InputStream>> asBinary() {
+        return null;
     }
 
     public String getUrl() {
@@ -207,46 +283,4 @@ public class HttpRequestWithBody {
         this.TIMEOUT = timeout;
     }
 
-    private RequestException getException() {
-        return this.httpException;
-    }
-
-    private void setHttpException(RequestException exception) {
-        this.httpException = exception;
-    }
-
-    private void setResponse(String response) {
-        this.httpResponse = response;
-    }
-
-    private String getResponse() {
-        return this.httpResponse;
-    }
-
-    private static native void proxyXMLHttpRequestOpen() /*-{
-        var proxied = $wnd.XMLHttpRequest.prototype.open;
-        (function() {
-            $wnd.XMLHttpRequest.prototype.open =
-                function() {
-                    arguments[2] = false;
-                    return proxied.apply(this, [].slice.call(arguments));
-                };
-        })();
-    }-*/;
-
-    private String getHttpStatusText() {
-        return httpStatusText;
-    }
-
-    private void setHttpStatusText(String httpStatusText) {
-        this.httpStatusText = httpStatusText;
-    }
-
-    private Integer getHttpStatusCode() {
-        return httpStatusCode;
-    }
-
-    private void setHttpStatusCode(Integer httpStatusCode) {
-        this.httpStatusCode = httpStatusCode;
-    }
 }

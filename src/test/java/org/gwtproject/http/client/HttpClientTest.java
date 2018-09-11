@@ -1,10 +1,12 @@
 package org.gwtproject.http.client;
 
-import com.google.gwt.json.client.JSONObject;
-import com.google.gwt.json.client.JSONParser;
 import com.google.gwt.json.client.JSONString;
 import com.google.gwt.junit.client.GWTTestCase;
 import com.google.gwt.user.client.Window;
+import io.reactivex.Single;
+import io.reactivex.functions.Consumer;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.FixMethodOrder;
 import org.junit.runners.MethodSorters;
 import java.util.logging.Logger;
@@ -20,131 +22,197 @@ public class HttpClientTest extends GWTTestCase {
     }
 
     public void testGet() throws Exception{
-        HttpResponse<JSONObject> response = HttpClient.get("https://httpbin.org/get")
+        Single<HttpResponse<JsonNode>> singleResponse = HttpClient.get("https://httpbin.org/get")
                 .header("accept", "application/json")
                 .header("Content-Type", "application/json")
                 .asJson();
-        Window.alert(response.toString());
-        JSONObject json = response.getBody();
-        JSONString url = json.get("url").isString();
-        JSONObject headers = json.get("headers").isObject();
-        assertNotNull(json);
-        assertNotNull(url);
-        assertNotNull(headers);
-        Window.alert("Test Done");
+        singleResponse.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) throws Exception {
+                Window.alert(response.getBody().toString());
+                JSONObject json = response.getBody().getObject();
+                String url = json.getString("url");
+                JSONObject headers = json.getJSONObject("headers");
+                assertNotNull(json);
+                assertNotNull(url);
+                assertNotNull(headers);
+                Window.alert("Test Done");
+                finishTest();
+            }
+        });
+        delayTestFinish(1000);
     }
 
     public void testPostFormField() throws Exception{
-        HttpResponse<JSONObject> response = HttpClient.post("https://httpbin.org/post")
+        Single<HttpResponse<JsonNode>> singleResponse = HttpClient.post("https://httpbin.org/post")
                 .header("accept", "application/json")
                 .header("Content-Type", "application/json")
                 .queryString("name", "Mark")
                 .field("middle", "O")
                 .field("last", "Polo")
                 .asJson();
-        Window.alert(response.toString());
-        JSONObject json = response.getBody();
-        JSONString url = json.get("url").isString();
-        JSONObject headers = json.get("headers").isObject();
-        JSONObject args = json.get("args").isObject();
-        assertNotNull(json);
-        assertNotNull(url);
-        assertNotNull(headers);
-        assertNotNull(args);
-        String name = args.get("name").isString().stringValue();
-        assertEquals("Mark", name);
+        singleResponse.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) throws Exception {
+                Window.alert(response.toString());
+                JSONObject json = response.getBody().getObject();
+                String url = json.getString("url");
+                JSONArray headers = json.getJSONArray("headers");
+                JSONObject args = json.getJSONObject("args");
+                assertNotNull(json);
+                assertNotNull(url);
+                assertNotNull(headers);
+                assertNotNull(args);
+                String name = args.getString("name");
+                assertEquals("Mark", name);
+            }
+        });
     }
 
     public void testPostJson() throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("hello", new JSONString("world"));
 
-        HttpResponse<JSONObject> response = HttpClient.post("https://httpbin.org/post")
+        Single<HttpResponse<JsonNode>> singleResponse = HttpClient.post("https://httpbin.org/post")
                 //.header("accept", "application/json")
                 //.header("Content-Type", "application/json")
                 .queryString("name", "Mark")
-                .body(payload.isObject().toString())
+                .body(payload.toString())
                 .asJson();
-        Window.alert(response.toString());
-        JSONObject json = response.getBody();
-        JSONString url = json.get("url").isString();
-        JSONObject headers = json.get("headers").isObject();
-        JSONObject jsonField = json.get("json").isObject();
 
-        assertNotNull(json);
-        assertNotNull(url);
-        assertNotNull(headers);
-        assertNotNull(jsonField);
+        singleResponse.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) throws Exception {
+                Window.alert(response.toString());
+                JSONObject json = response.getBody().getObject();
+                String url = json.getString("url");
+                JSONObject headers = json.getJSONObject("headers");
+                JSONObject jsonField = json.getJSONObject("json");
 
-        String accept = headers.get("Accept").isString().stringValue();
-        String contentType = headers.get("Content-Type").isString().stringValue();
-        String hello = jsonField.get("hello").isString().stringValue();
+                assertNotNull(json);
+                assertNotNull(url);
+                assertNotNull(headers);
+                assertNotNull(jsonField);
 
-        assertEquals("application/json", accept);
-        assertEquals("application/json", contentType);
-        assertEquals("world", hello);
+                String accept = headers.getString("Accept");
+                String contentType = headers.getString("Content-Type");
+                String hello = jsonField.getString("hello");
+
+                assertEquals("application/json", accept);
+                assertEquals("application/json", contentType);
+                assertEquals("world", hello);
+            }
+        });
     }
 
     public void testPut() throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("hello", new JSONString("world"));
 
-        HttpResponse<JSONObject> response = HttpClient.put("https://httpbin.org/put")
+        Single<HttpResponse<JsonNode>> singleResponse = HttpClient.put("https://httpbin.org/put")
                 .queryString("name", "Mark")
-                .body(payload.isObject().toString())
+                .body(payload.toString())
                 .basicAuth("john", "doe")
                 .asJson();
-        Window.alert(response.toString());
-        JSONObject json = response.getBody();
-        JSONString url = json.get("url").isString();
-        JSONObject headers = json.get("headers").isObject();
-        JSONObject jsonField = json.get("json").isObject();
 
-        assertNotNull(json);
-        assertNotNull(url);
-        assertNotNull(headers);
-        assertNotNull(jsonField);
+        singleResponse.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) throws Exception {
+                Window.alert(response.toString());
+                JSONObject json = response.getBody().getObject();
+                String url = json.getString("url");
+                JSONObject headers = json.getJSONObject("headers");
+                JSONObject jsonField = json.getJSONObject("json");
 
-        String accept = headers.get("Accept").isString().stringValue();
-        String authorization = headers.get("Authorization").isString().stringValue();
-        String contentType = headers.get("Content-Type").isString().stringValue();
-        String hello = jsonField.get("hello").isString().stringValue();
+                assertNotNull(json);
+                assertNotNull(url);
+                assertNotNull(headers);
+                assertNotNull(jsonField);
 
-        assertEquals("application/json", accept);
-        assertEquals("application/json", contentType);
-        assertEquals("world", hello);
+                String accept = headers.getString("Accept");
+                String authorization = headers.getString("Authorization");
+                String contentType = headers.getString("Content-Type");
+                String hello = jsonField.getString("hello");
 
-        String actual = "Basic " + Base64.btoa("john" + ":" + "doe");
-        assertEquals(actual, authorization);
+                assertEquals("application/json", accept);
+                assertEquals("application/json", contentType);
+                assertEquals("world", hello);
+
+                String actual = "Basic " + Base64.btoa("john" + ":" + "doe");
+                assertEquals(actual, authorization);
+            }
+        });
+
     }
 
     public void testDelete() throws Exception {
         JSONObject payload = new JSONObject();
         payload.put("hello", new JSONString("world"));
 
-        HttpResponse<JSONObject> response = HttpClient.delete("https://httpbin.org/delete")
+        Single<HttpResponse<JsonNode>> singleResponse = HttpClient.delete("https://httpbin.org/delete")
                 .queryString("name", "Mark")
-                .body(payload.isObject().toString())
+                .body(payload.toString())
                 .basicAuth("john", "doe")
                 .asJson();
-        Window.alert(response.toString());
-        JSONObject json = response.getBody();
-        JSONString url = json.get("url").isString();
-        JSONObject headers = json.get("headers").isObject();
 
-        assertNotNull(json);
-        assertNotNull(url);
-        assertNotNull(headers);
+        singleResponse.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) throws Exception {
+                Window.alert(response.toString());
+                JSONObject json = response.getBody().getObject();
+                String url = json.getString("url");
+                JSONObject headers = json.getJSONObject("headers");
 
-        String accept = headers.get("Accept").isString().stringValue();
-        String authorization = headers.get("Authorization").isString().stringValue();
-        String contentType = headers.get("Content-Type").isString().stringValue();
+                assertNotNull(json);
+                assertNotNull(url);
+                assertNotNull(headers);
 
-        assertEquals("application/json", accept);
-        assertEquals("application/json", contentType);
+                String accept = headers.getString("Accept");
+                String authorization = headers.getString("Authorization");
+                String contentType = headers.getString("Content-Type");
 
-        String actual = "Basic " + Base64.btoa("john" + ":" + "doe");
-        assertEquals(actual, authorization);
+                assertEquals("application/json", accept);
+                assertEquals("application/json", contentType);
+
+                String actual = "Basic " + Base64.btoa("john" + ":" + "doe");
+                assertEquals(actual, authorization);
+            }
+        });
     }
 
+    public void testClientError() {
+        Single<HttpResponse<JsonNode>> response = HttpClient.get("https://httpbin.org/status/400").asJson();
+        response.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) {
+                if(response.getStatus() == 400) {
+                    finishTest();
+                } else {
+                    fail();
+                }
+            }
+        });
+        delayTestFinish(1000);
+    }
+
+    public void testServerError() {
+        Single<HttpResponse<JsonNode>> response = HttpClient.get("https://httpbin.org/status/500").asJson();
+        response.subscribe(new Consumer<HttpResponse<JsonNode>>() {
+            @Override
+            public void accept(HttpResponse<JsonNode> response) {
+                if(response.getStatus() == 500) {
+                    finishTest();
+                } else {
+                    fail();
+                }
+            }
+        });
+        delayTestFinish(1000);
+    }
+
+    public void testBlockingGet() {
+//        Single<HttpResponse<JsonNode>> responseSingle = HttpClient.get("https://httpbin.org/get").asJson();
+//        HttpResponse<JsonNode> response = responseSingle.blockingGet();
+//        Window.alert(response.getBody().toString());
+    }
 }

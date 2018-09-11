@@ -3,8 +3,12 @@ package org.gwtproject.http.client;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import com.google.gwt.http.client.*;
-import com.google.gwt.json.client.JSONObject;
+import com.google.gwt.user.client.Window;
+import io.reactivex.Single;
+import io.reactivex.SingleEmitter;
+import io.reactivex.SingleOnSubscribe;
 
+import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -20,11 +24,6 @@ public class GetRequest {
 
     private String authorization = null;
     private int TIMEOUT = 60000;
-
-    private String httpResponse;
-    private String httpStatusText = null;
-    private Integer httpStatusCode = null;
-    private RequestException httpException;
 
     public GetRequest(String url) {
         setUrl(url);
@@ -54,104 +53,89 @@ public class GetRequest {
         return this;
     }
 
-    public HttpResponse<String> asString() throws RequestException {
-        proxyXMLHttpRequestOpen();
-        httpException = null;
-        httpResponse = null;
-
-        if(queryMap != null && !queryMap.isEmpty()){
-            url = url + "?";
-            url = url +  queries(queryMap);
-        }
-        RequestBuilder b = new RequestBuilder(RequestBuilder.GET, url);
-        b.setTimeoutMillis(TIMEOUT);
-        if(headerMap != null){
-            // Set default first
-            headerMap.put("Content-Type", "application/json");
-            headerMap.put("accept", "application/json");
-            for (Map.Entry<String,String> entry : headerMap.entries()) {
-                if(entry.getKey() != null && entry.getValue() != null
-                        && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
-                    b.setHeader(entry.getKey(), entry.getValue());
+    public Single<HttpResponse<String>> asString() {
+        return Single.create(new SingleOnSubscribe<HttpResponse<String>>() {
+            @Override
+            public void subscribe(SingleEmitter<HttpResponse<String>> emitter) throws Exception {
+                if(queryMap != null && !queryMap.isEmpty()){
+                    url = url + "?";
+                    url = url +  queries(queryMap);
                 }
-            }
-        }
-        if(authorization != null){
-            b.setHeader("Authorization", authorization);
-        }
-        b.sendRequest(null, new RequestCallback() {
-            public void onResponseReceived(Request request, Response response) {
-                String resp = response.getText();
-                int statusCode = response.getStatusCode();
-                String statusText = response.getStatusText();
-                setHttpStatusCode(statusCode);
-                setHttpResponse(resp);
-                setHttpStatusText(statusText);
-                if(response.getStatusCode() >= 400){
-                    setHttpException(new HttpRequestException(resp, response.getStatusCode()));
-                } else {
-                    setHttpResponse(response.getText());
+                RequestBuilder requestBuilder = new RequestBuilder(RequestBuilder.GET, url);
+                requestBuilder.setTimeoutMillis(TIMEOUT);
+                if(headerMap != null){
+                    // Set default first
+                    headerMap.put("Content-Type", "application/json");
+                    headerMap.put("accept", "application/json");
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            requestBuilder.setHeader(entry.getKey(), entry.getValue());
+                        }
+                    }
                 }
-            }
-            public void onError(Request request, Throwable exception) {
-                httpException = (RequestException) exception;
+                if(authorization != null){
+                    requestBuilder.setHeader("Authorization", authorization);
+                }
+                requestBuilder.sendRequest(null, new RequestCallback() {
+                    public void onResponseReceived(Request request, Response response) {
+                        String resp = response.getText();
+                        int statusCode = response.getStatusCode();
+                        String statusText = response.getStatusText();
+                        emitter.onSuccess(new StringHttpResponse(statusCode, statusText, resp));
+                    }
+                    public void onError(Request request, Throwable exception) {
+                        emitter.onError(exception);
+                    }
+                });
             }
         });
-        if(httpException != null) {
-            throw httpException;
-        }
-        return new StringHttpResponse(getHttpStatusCode(), getHttpStatusText(), getHttpResponse());
     }
 
-    public HttpResponse<JSONObject> asJson() throws RequestException {
-        proxyXMLHttpRequestOpen();
+    public Single<HttpResponse<InputStream>> asBinary() {
+        return null;
+    }
 
-        httpException = null;
-        httpResponse = null;
-
-        if(queryMap != null && !queryMap.isEmpty()){
-            url = url + "?";
-            url = url +  queries(queryMap);
-        }
-        RequestBuilder b = new RequestBuilder(RequestBuilder.GET, url);
-        b.setTimeoutMillis(TIMEOUT);
-        if(headerMap != null){
-            // Set default first
-            headerMap.put("Content-Type", "application/json");
-            headerMap.put("accept", "application/json");
-            for (Map.Entry<String,String> entry : headerMap.entries()) {
-                if(entry.getKey() != null && entry.getValue() != null
-                        && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
-                    b.setHeader(entry.getKey(), entry.getValue());
+    public Single<HttpResponse<JsonNode>> asJson() {
+        return Single.create(new SingleOnSubscribe<HttpResponse<JsonNode>>() {
+            @Override public void subscribe(SingleEmitter<HttpResponse<JsonNode>> e) throws RequestException {
+                if(queryMap != null && !queryMap.isEmpty()){
+                    url = url + "?";
+                    url = url +  queries(queryMap);
                 }
-            }
-        }
-        if(authorization != null){
-            b.setHeader("Authorization", authorization);
-        }
-        b.sendRequest(null, new RequestCallback() {
-            public void onResponseReceived(Request request, Response response) {
-                String resp = response.getText();
-                int statusCode = response.getStatusCode();
-                String statusText = response.getStatusText();
-                setHttpStatusCode(statusCode);
-                setHttpResponse(resp);
-                setHttpStatusText(statusText);
-                if(response.getStatusCode() >= 400){
-                    setHttpException(new HttpRequestException(resp, response.getStatusCode()));
-                } else {
-                    setHttpResponse(response.getText());
+                RequestBuilder requestBuilder = new RequestBuilder(RequestBuilder.GET, url);
+                requestBuilder.setTimeoutMillis(TIMEOUT);
+                if(headerMap != null){
+                    // Set default first
+                    headerMap.put("Content-Type", "application/json");
+                    headerMap.put("accept", "application/json");
+                    for (Map.Entry<String,String> entry : headerMap.entries()) {
+                        if(entry.getKey() != null && entry.getValue() != null
+                                && !entry.getKey().isEmpty() && !entry.getValue().isEmpty()) {
+                            requestBuilder.setHeader(entry.getKey(), entry.getValue());
+                        }
+                    }
                 }
-            }
-            public void onError(Request request, Throwable exception) {
-                httpException = (RequestException) exception;
+                if(authorization != null){
+                    requestBuilder.setHeader("Authorization", authorization);
+                }
+                requestBuilder.setCallback(new RequestCallback() {
+                    @Override public void onResponseReceived(Request req, Response res) {
+                        int statusCode = res.getStatusCode();
+                        String statusText = res.getStatusText();
+                        String resp = res.getText();
+                        e.onSuccess(new JsonHttpResponse(statusCode, statusText, resp));
+                    }
+                    @Override public void onError(Request req, Throwable ex) {
+                        e.onError(ex);
+                    }
+                });
+                Request request = requestBuilder.send();
+                e.setCancellable(request::cancel);
             }
         });
-        if(httpException != null) {
-            throw httpException;
-        }
-        return new JsonHttpResponse(getHttpStatusCode(), getHttpStatusText(), getHttpResponse());
     }
+
 
     public String getUrl() {
         return url;
@@ -189,35 +173,4 @@ public class GetRequest {
         })();
     }-*/;
 
-    private String getHttpResponse() {
-        return httpResponse;
-    }
-
-    private void setHttpResponse(String httpResponse) {
-        this.httpResponse = httpResponse;
-    }
-
-    private String getHttpStatusText() {
-        return httpStatusText;
-    }
-
-    private void setHttpStatusText(String httpStatusText) {
-        this.httpStatusText = httpStatusText;
-    }
-
-    private Integer getHttpStatusCode() {
-        return httpStatusCode;
-    }
-
-    private void setHttpStatusCode(Integer httpStatusCode) {
-        this.httpStatusCode = httpStatusCode;
-    }
-
-    private RequestException getException() {
-        return this.httpException;
-    }
-
-    private void setHttpException(RequestException exception) {
-        this.httpException = exception;
-    }
 }
